@@ -46,7 +46,7 @@ import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server";
 import multer from "multer";
 import { FindManyOptions, FindOperator, LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
-import { URL } from "url";
+import { URL } from "node:url";
 
 const router: Router = Router({ mergeParams: true });
 

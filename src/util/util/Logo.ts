@@ -1,4 +1,4 @@
-import { KittyLogo } from ".";
+import { KittyLogo } from "./KittyLogo.ts";
 import { blueBright } from "picocolors";
 
 export class Logo {

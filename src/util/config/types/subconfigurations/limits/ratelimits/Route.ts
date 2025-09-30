@@ -16,7 +16,7 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { AuthRateLimit } from ".";
+import { AuthRateLimit } from "@spacebar/util";
 import { RateLimitOptions } from "./RateLimitOptions";
 
 export class RouteRateLimit {

@@ -17,7 +17,7 @@
 */
 
 import { Config } from "@spacebar/util";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import ms, { StringValue } from "ms";
 import * as console from "node:console";
 

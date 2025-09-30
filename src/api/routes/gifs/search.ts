@@ -26,7 +26,7 @@ import {
 import { Request, Response, Router } from "express";
 import fetch from "node-fetch-commonjs";
 import { ProxyAgent } from "proxy-agent";
-import http from "http";
+import http from "node:http";
 
 const router = Router({ mergeParams: true });
 

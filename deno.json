@@ -1,0 +1,9 @@
+{
+	"imports": {
+		"@spacebar/api": "./src/api/index.ts",
+		"@spacebar/cdn": "./src/cdn/index.ts",
+		"@spacebar/gateway": "./src/gateway/index.ts",
+		"@spacebar/util": "./src/util/index.ts",
+		"@spacebar/webrtc": "./src/webrtc/index.ts"
+	}
+}

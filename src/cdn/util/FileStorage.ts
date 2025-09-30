@@ -17,10 +17,10 @@
 */
 
 import { Storage } from "./Storage";
-import fs from "fs";
-import { join, dirname } from "path";
+import fs from "node:fs";
+import { join, dirname } from "node:path";
 import "missing-native-js-functions";
-import { Readable } from "stream";
+import { Readable } from "node:stream";
 import ExifTransformer from "exif-be-gone";
 
 // TODO: split stored files into separate folders named after cloned route

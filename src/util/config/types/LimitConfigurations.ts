@@ -23,7 +23,7 @@ import {
 	MessageLimits,
 	RateLimits,
 	UserLimits,
-} from ".";
+} from "@spacebar/util";
 
 export class LimitsConfiguration {
 	user: UserLimits = new UserLimits();

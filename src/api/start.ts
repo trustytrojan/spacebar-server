@@ -25,7 +25,7 @@ import "missing-native-js-functions";
 import { config } from "dotenv";
 config({ quiet: true });
 import { SpacebarServer } from "./Server";
-import cluster from "cluster";
+import cluster from "node:cluster";
 import os from "os";
 let cores = 1;
 try {

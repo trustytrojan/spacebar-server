@@ -40,7 +40,7 @@ import { Request, Response, Router } from "express";
 import { Server, ServerOptions } from "lambert-server";
 import "missing-native-js-functions";
 import morgan from "morgan";
-import path from "path";
+import path from "node:path";
 import { red } from "picocolors";
 import { initInstance } from "./util/handlers/Instance";
 

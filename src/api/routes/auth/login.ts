@@ -27,7 +27,7 @@ import {
 	generateWebAuthnTicket,
 } from "@spacebar/util";
 import bcrypt from "bcrypt";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { Request, Response, Router } from "express";
 
 const router: Router = Router({ mergeParams: true });

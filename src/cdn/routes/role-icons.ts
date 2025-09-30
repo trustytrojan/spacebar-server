@@ -21,7 +21,7 @@ import { Config, Snowflake } from "@spacebar/util";
 import { storage } from "../util/Storage";
 import { fileTypeFromBuffer } from "file-type";
 import { HTTPError } from "lambert-server";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { multer } from "../util/multer";
 
 //Role icons ---> avatars.ts modified

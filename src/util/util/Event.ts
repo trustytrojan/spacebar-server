@@ -18,7 +18,7 @@
 
 import { Channel } from "amqplib";
 import { RabbitMQ } from "./RabbitMQ";
-import EventEmitter from "events";
+import EventEmitter from "node:events";
 import { EVENT, Event } from "../interfaces";
 export const events = new EventEmitter();
 

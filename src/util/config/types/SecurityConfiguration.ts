@@ -16,8 +16,8 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import crypto from "crypto";
-import { CaptchaConfiguration, TwoFactorConfiguration } from ".";
+import crypto from "node:crypto";
+import { CaptchaConfiguration, TwoFactorConfiguration } from "@spacebar/util";
 
 export class SecurityConfiguration {
 	captcha: CaptchaConfiguration = new CaptchaConfiguration();

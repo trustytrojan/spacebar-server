@@ -16,7 +16,7 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { KafkaBroker } from ".";
+import { KafkaBroker } from "@spacebar/util";
 
 export class KafkaConfiguration {
 	brokers: KafkaBroker[] | null = null;

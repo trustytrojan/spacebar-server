@@ -24,7 +24,7 @@ import {
 	ManyToOne,
 	RelationId,
 } from "typeorm";
-import { URL } from "url";
+import { URL } from "node:url";
 import { deleteFile } from "../util/cdn";
 import { BaseClass } from "./BaseClass";
 import {

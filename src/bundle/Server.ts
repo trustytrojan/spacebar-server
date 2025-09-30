@@ -21,7 +21,7 @@ import morgan from "morgan";
 process.on("unhandledRejection", console.error);
 process.on("uncaughtException", console.error);
 
-import http from "http";
+import http from "node:http";
 import * as Api from "@spacebar/api";
 import * as Gateway from "@spacebar/gateway";
 import * as Webrtc from "@spacebar/webrtc";

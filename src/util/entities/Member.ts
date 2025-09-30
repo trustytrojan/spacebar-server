@@ -31,7 +31,7 @@ import {
 	PrimaryGeneratedColumn,
 	RelationId,
 } from "typeorm";
-import { Ban, Channel, PublicGuildRelations } from ".";
+import { Ban, Channel, PublicGuildRelations } from "@spacebar/api";
 import { ReadyGuildDTO } from "../dtos";
 import {
 	GuildCreateEvent,

@@ -27,7 +27,7 @@ import {
 } from "@spacebar/util";
 import ws from "ws";
 import { Connection } from "./events/Connection";
-import http from "http";
+import http from "node:http";
 import { cleanupOnStartup } from "./util/Utils";
 
 export class Server {

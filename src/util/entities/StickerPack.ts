@@ -24,7 +24,7 @@ import {
 	OneToMany,
 	RelationId,
 } from "typeorm";
-import { Sticker } from ".";
+import { Sticker } from "@spacebar/util";
 import { BaseClass } from "./BaseClass";
 
 @Entity({

@@ -18,7 +18,7 @@
 
 import { Config, Embed, EmbedImage, EmbedType } from "@spacebar/util";
 import * as cheerio from "cheerio";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import fetch, { RequestInit } from "node-fetch-commonjs";
 import { yellow } from "picocolors";
 import probe from "probe-image-size";

@@ -20,9 +20,9 @@ import "missing-native-js-functions";
 import fetch from "node-fetch-commonjs";
 import { ProxyAgent } from "proxy-agent";
 import readline from "readline";
-import fs from "fs/promises";
-import path from "path";
-import http from "http";
+import fs from "node:fs/promises";
+import path from "node:path";
+import http from "node:http";
 
 const rl = readline.createInterface({
 	input: process.stdin,

@@ -24,7 +24,7 @@ import {
 	registerRoutes,
 } from "@spacebar/util";
 import { CORS, BodyParser } from "@spacebar/api";
-import path from "path";
+import path from "node:path";
 import avatarsRoute from "./routes/avatars";
 import guildProfilesRoute from "./routes/guild-profiles";
 import iconsRoute from "./routes/role-icons";

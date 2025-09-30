@@ -20,7 +20,7 @@ import {
 	DateOfBirthConfiguration,
 	PasswordConfiguration,
 	RegistrationEmailConfiguration,
-} from ".";
+} from "@spacebar/util";
 
 export class RegisterConfiguration {
 	email: RegistrationEmailConfiguration =

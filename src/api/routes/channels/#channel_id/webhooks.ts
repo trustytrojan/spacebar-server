@@ -30,7 +30,7 @@ import {
 	trimSpecial,
 	ValidateName,
 } from "@spacebar/util";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server";
 

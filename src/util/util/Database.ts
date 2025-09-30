@@ -17,7 +17,7 @@
 */
 
 import { config } from "dotenv";
-import path from "path";
+import path from "node:path";
 import { green, red, yellow } from "picocolors";
 import { DataSource } from "typeorm";
 import { ConfigEntity } from "../entities/Config";

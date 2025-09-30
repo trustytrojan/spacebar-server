@@ -29,7 +29,7 @@ import {
 	getPermission,
 	getRights,
 } from "@spacebar/util";
-import { AnyValidateFunction } from "ajv/dist/core";
+import { AnyValidateFunction } from "ajv/dist/core.js";
 import { NextFunction, Request, Response } from "express";
 
 declare global {

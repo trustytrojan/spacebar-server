@@ -37,7 +37,7 @@ import {
 	OPCODES,
 	Send,
 } from "@spacebar/gateway";
-import murmur from "murmurhash-js/murmurhash3_gc";
+import murmur from "murmurhash-js/murmurhash3_gc.js";
 import { check } from "./instanceOf";
 
 // TODO: only show roles/members that have access to this channel
