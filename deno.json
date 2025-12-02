@@ -8,6 +8,8 @@
 		"@spacebar/util/util": "./src/util/util/index.ts",
 		"@spacebar/webrtc": "./src/webrtc/index.ts",
 		"@spacebar/schemas": "./src/schemas/index.ts",
-		"@spacebar/schemas*": "./src/schemas/index.ts"
+		"@spacebar/schemas*": "./src/schemas/index.ts",
+		"lambert-server": "./src/util/util/lambert-server",
+		"@protobuf-ts/runtime": "npm:@protobuf-ts/runtime"
 	}
 }

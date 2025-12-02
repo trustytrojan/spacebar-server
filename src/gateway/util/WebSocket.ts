@@ -20,7 +20,7 @@ import { Intents, ListenEventOpts, Permissions } from "@spacebar/util";
 import WS from "ws";
 import { Deflate, Inflate } from "fast-zlib";
 import { Capabilities } from "./Capabilities";
-import { ZstdCompress } from "zlib";
+import { ZstdCompress } from "node:zlib";
 import { ZstdDecompress } from "node:zlib";
 import { Decoder, Encoder } from "@toondepauw/node-zstd";
 
