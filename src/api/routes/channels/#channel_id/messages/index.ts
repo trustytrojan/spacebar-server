@@ -18,35 +18,47 @@
 
 import { handleMessage, postHandleMessage, route } from "@spacebar/api";
 import {
+	ApiError,
 	Attachment,
+	AutomodRule,
+	AutomodTriggerTypes,
 	Channel,
 	Config,
+	DiscordApiErrors,
 	DmChannelDTO,
+	emitEvent,
 	FieldErrors,
+	getPermission,
+	getUrlSignature,
 	Member,
 	Message,
 	MessageCreateEvent,
-	MessageCreateSchema,
-	Reaction,
-	ReadState,
-	Rights,
-	Snowflake,
-	User,
-	emitEvent,
-	getPermission,
-	isTextChannel,
-	getUrlSignature,
-	uploadFile,
 	NewUrlSignatureData,
 	NewUrlUserSignatureData,
-	MessageCreateCloudAttachment,
-	MessageCreateAttachment,
+	ReadState,
+	Relationship,
+	Rights,
+	Snowflake,
+	uploadFile,
+	User,
+	stringGlobToRegexp,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server";
 import multer from "multer";
 import { FindManyOptions, FindOperator, LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
 import { URL } from "node:url";
+import {
+	AutomodCustomWordsRule,
+	AutomodRuleActionType,
+	AutomodRuleEventType,
+	isTextChannel,
+	MessageCreateAttachment,
+	MessageCreateCloudAttachment,
+	MessageCreateSchema,
+	Reaction,
+	RelationshipType,
+} from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -233,17 +245,28 @@ router.get(
 			return x;
 		});
 
+		await Promise.all(
+			ret
+				.filter((x: MessageCreateSchema) => x.interaction_metadata && !x.interaction_metadata.user)
+				.map(async (x: MessageCreateSchema) => {
+					x.interaction_metadata!.user = x.interaction!.user = await User.findOneOrFail({ where: { id: (x as Message).interaction_metadata!.user_id } });
+				}),
+		);
 
 		// polyfill message references for old messages
-		await ret.filter((msg) => msg.message_reference && !msg.referenced_message?.id).forEachAsync(async (msg) => {
-			const whereOptions: { id: string; guild_id?: string; channel_id?: string } = {
-				id: msg.message_reference!.message_id,
-			};
-			if (msg.message_reference!.guild_id) whereOptions.guild_id = msg.message_reference!.guild_id;
-			if (msg.message_reference!.channel_id) whereOptions.channel_id = msg.message_reference!.channel_id;
+		await Promise.all(
+			ret
+				.filter((msg) => msg.message_reference && !msg.referenced_message?.id)
+				.map(async (msg) => {
+					const whereOptions: { id: string; guild_id?: string; channel_id?: string } = {
+						id: msg.message_reference!.message_id,
+					};
+					if (msg.message_reference!.guild_id) whereOptions.guild_id = msg.message_reference!.guild_id;
+					if (msg.message_reference!.channel_id) whereOptions.channel_id = msg.message_reference!.channel_id;
 
-			msg.referenced_message = await Message.findOne({ where: whereOptions, relations: ["author", "mentions", "mention_roles", "mention_channels"] });
-		});
+					msg.referenced_message = await Message.findOne({ where: whereOptions, relations: ["author", "mentions", "mention_roles", "mention_channels"] });
+				}),
+		);
 
 		return res.json(ret);
 	},
@@ -303,6 +326,23 @@ router.post(
 		});
 		if (!channel.isWritable()) {
 			throw new HTTPError(`Cannot send messages to channel of type ${channel.type}`, 400);
+		}
+
+		// handle blocked users in dms
+		if (channel.recipients?.length == 2) {
+			const otherUser = channel.recipients.find((r) => r.user_id != req.user_id)?.user;
+			if (otherUser) {
+				const relationship = await Relationship.findOne({
+					where: [
+						{ from_id: req.user_id, to_id: otherUser.id },
+						{ from_id: otherUser.id, to_id: req.user_id },
+					],
+				});
+
+				if (relationship?.type === RelationshipType.blocked) {
+					throw DiscordApiErrors.CANNOT_MESSAGE_USER;
+				}
+			}
 		}
 
 		if (body.nonce) {
@@ -399,8 +439,63 @@ router.post(
 			}
 
 			// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-			//@ts-ignore
+			// @ts-ignore
 			message.member.roles = message.member.roles.filter((x) => x.id != x.guild_id).map((x) => x.id);
+
+			if (message.content)
+				try {
+					const matchingRules = await AutomodRule.find({
+						where: { guild_id: message.guild_id, enabled: true, event_type: AutomodRuleEventType.MESSAGE_SEND },
+						order: { position: "ASC" },
+					});
+					for (const rule of matchingRules) {
+						if (rule.exempt_channels.includes(channel_id)) continue;
+						if (message.member.roles.some((x) => rule.exempt_roles.includes(x.id))) continue;
+
+						if (rule.trigger_type == AutomodTriggerTypes.CUSTOM_WORDS) {
+							const triggerMeta = rule.trigger_metadata as AutomodCustomWordsRule;
+							const regexes = triggerMeta.regex_patterns.map((x) => new RegExp(x, "i")).concat(triggerMeta.keyword_filter.map((k) => stringGlobToRegexp(k, "i")));
+							const allowedRegexes = triggerMeta.allow_list.map((k) => stringGlobToRegexp(k, "i"));
+
+							const matches = regexes
+								.map((r) => message.content!.match(r))
+								.filter((x) => x !== null && x.length > 0)
+								.filter((x) => !allowedRegexes.some((ar) => ar.test(x![0])));
+
+							if (matches.length > 0) {
+								console.log("Automod triggered by message:", message.id, "matches:", matches);
+								if (rule.actions.some((x) => x.type == AutomodRuleActionType.SEND_ALERT_MESSAGE && x.metadata.channel_id)) {
+									const alertActions = rule.actions.filter((x) => x.type == AutomodRuleActionType.SEND_ALERT_MESSAGE);
+									for (const action of alertActions) {
+										const alertChannel = await Channel.findOne({ where: { id: action.metadata.channel_id } });
+										if (!alertChannel) continue;
+										const msg = await Message.createWithDefaults({
+											content: `Automod Alert: Message ${message.id} by <@${message.author_id}> in <#${channel.id}> triggered automod rule "${rule.name}".\nMatched terms: ${matches
+												.map((x) => `\`${x![0]}\``)
+												.join(", ")}`,
+											author: message.author,
+											channel_id: alertChannel.id,
+											guild_id: message.guild_id,
+											member_id: message.member_id,
+											author_id: message.author_id,
+										});
+
+										await message.save();
+										// await Promise.all([
+										await emitEvent({
+											event: "MESSAGE_CREATE",
+											channel_id: msg.channel_id,
+											data: msg.toJSON(),
+										} as MessageCreateEvent);
+										// ]);
+									}
+								}
+							}
+						}
+					}
+				} catch (e) {
+					console.log("[Automod] failed to process message:", e);
+				}
 		}
 
 		let read_state = await ReadState.findOne({
@@ -408,6 +503,8 @@ router.post(
 		});
 		if (!read_state) read_state = ReadState.create({ user_id: req.user_id, channel_id });
 		read_state.last_message_id = message.id;
+		//It's a little more complicated than this but this'll do
+		read_state.mention_count = 0;
 
 		await Promise.all([
 			read_state.save(),

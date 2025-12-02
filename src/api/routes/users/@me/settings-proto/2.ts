@@ -21,14 +21,11 @@ import { Request, Response, Router } from "express";
 import {
 	emitEvent,
 	OrmUtils,
-	SettingsProtoJsonResponse,
-	SettingsProtoResponse,
-	SettingsProtoUpdateJsonSchema,
-	SettingsProtoUpdateSchema,
 	UserSettingsProtos,
 } from "@spacebar/util";
 import { FrecencyUserSettings } from "discord-protos";
 import { JsonValue } from "@protobuf-ts/runtime";
+import { SettingsProtoJsonResponse, SettingsProtoResponse, SettingsProtoUpdateJsonSchema, SettingsProtoUpdateSchema } from "@spacebar/schemas"
 
 const router: Router = Router({ mergeParams: true });
 
@@ -50,7 +47,7 @@ router.get(
 		},
 	}),
 	async (req: Request, res: Response) => {
-		const userSettings = await UserSettingsProtos.getOrCreate(req.user_id);
+		const userSettings = await UserSettingsProtos.getOrDefault(req.user_id);
 
 		res.json({
 			settings: FrecencyUserSettings.toBase64(
@@ -102,7 +99,7 @@ router.get(
 		},
 	}),
 	async (req: Request, res: Response) => {
-		const userSettings = await UserSettingsProtos.getOrCreate(req.user_id);
+		const userSettings = await UserSettingsProtos.getOrDefault(req.user_id);
 
 		res.json({
 			settings: FrecencyUserSettings.toJson(
@@ -157,7 +154,7 @@ async function patchUserSettings(
 	required_data_version: number | undefined,
 	atomic: boolean = false,
 ) {
-	const userSettings = await UserSettingsProtos.getOrCreate(userId);
+	const userSettings = await UserSettingsProtos.getOrDefault(userId);
 	let settings = userSettings.frecencySettings!;
 
 	if (
@@ -171,10 +168,11 @@ async function patchUserSettings(
 		};
 	}
 
-	console.log(
-		`Updating frecency settings for user ${userId} with atomic=${atomic}:`,
-		updatedSettings,
-	);
+	if ((process.env.LOG_PROTO_UPDATES || process.env.LOG_PROTO_FRECENCY_UPDATES) && process.env.LOG_PROTO_FRECENCY_UPDATES !== "false")
+		console.log(
+			`Updating frecency settings for user ${userId} with atomic=${atomic}:`,
+			updatedSettings,
+		);
 
 	if (!atomic) {
 		settings = FrecencyUserSettings.fromJson(

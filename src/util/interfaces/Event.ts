@@ -17,18 +17,13 @@
 */
 
 import {
-	RelationshipType,
 	ConnectedAccount,
 	Interaction,
-	ApplicationCommand,
 	Message,
-	PartialEmoji,
 	Invite,
 	Role,
 	Emoji,
-	PublicMember,
 	Channel,
-	PublicUser,
 	User,
 	Sticker,
 	Activity,
@@ -37,14 +32,13 @@ import {
 	UserSettings,
 	IReadyGuildDTO,
 	ReadState,
-	UserPrivate,
 	ReadyUserGuildSettingsEntries,
 	ReadyPrivateChannel,
 	GuildOrUnavailable,
-	GuildCreateResponse,
-	PublicVoiceState,
+	Snowflake,
 } from "@spacebar/util";
 import { JsonValue } from "@protobuf-ts/runtime";
+import { ApplicationCommand, GuildCreateResponse, PartialEmoji, PublicMember, PublicUser, PublicVoiceState, RelationshipType, UserPrivate } from "@spacebar/schemas";
 
 export interface Event {
 	guild_id?: string;
@@ -139,10 +133,7 @@ export interface ReadyEventData {
 	_trace?: string[]; // trace of the request, used for debugging
 }
 
-export type TraceNode =
-	| { micros: number; calls: TraceNode[] }
-	| { micros: number }
-	| string;
+export type TraceNode = { micros: number; calls: TraceNode[] } | { micros: number } | string;
 
 export type TraceRoot = [string, { micros: number; calls: TraceNode[] }];
 
@@ -518,7 +509,29 @@ export interface ApplicationCommandDeleteEvent extends Event {
 
 export interface InteractionCreateEvent extends Event {
 	event: "INTERACTION_CREATE";
-	data: Interaction;
+	data:
+		| Interaction
+		| {
+				id: Snowflake;
+				nonce?: string;
+		  };
+}
+
+export interface InteractionSuccessEvent extends Event {
+	event: "INTERACTION_SUCCESS";
+	data: {
+		id: Snowflake;
+		nonce: string;
+	};
+}
+
+export interface InteractionFailureEvent extends Event {
+	event: "INTERACTION_FAILURE";
+	data: {
+		id: Snowflake;
+		nonce?: string;
+		reason_code: number; // TODO: types?
+	};
 }
 
 export interface MessageAckEvent extends Event {
@@ -622,6 +635,8 @@ export type EventData =
 	| ApplicationCommandUpdateEvent
 	| ApplicationCommandDeleteEvent
 	| InteractionCreateEvent
+	| InteractionSuccessEvent
+	| InteractionFailureEvent
 	| MessageAckEvent
 	| RelationshipAddEvent
 	| RelationshipRemoveEvent;
@@ -670,6 +685,8 @@ export enum EVENTEnum {
 	UserConnectionsUpdate = "USER_CONNECTIONS_UPDATE",
 	WebhooksUpdate = "WEBHOOKS_UPDATE",
 	InteractionCreate = "INTERACTION_CREATE",
+	InteractionSuccess = "INTERACTION_SUCCESS",
+	InteractionFailure = "INTERACTION_FAILURE",
 	VoiceStateUpdate = "VOICE_STATE_UPDATE",
 	VoiceServerUpdate = "VOICE_SERVER_UPDATE",
 	ApplicationCommandCreate = "APPLICATION_COMMAND_CREATE",
@@ -723,6 +740,8 @@ export type EVENT =
 	| "USER_NOTE_UPDATE"
 	| "WEBHOOKS_UPDATE"
 	| "INTERACTION_CREATE"
+	| "INTERACTION_SUCCESS"
+	| "INTERACTION_FAILURE"
 	| "VOICE_STATE_UPDATE"
 	| "VOICE_SERVER_UPDATE"
 	| "STREAM_CREATE"

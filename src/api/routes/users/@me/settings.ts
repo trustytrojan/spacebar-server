@@ -17,8 +17,9 @@
 */
 
 import { route } from "@spacebar/api";
-import { User, UserSettingsSchema } from "@spacebar/util";
+import { User, UserSettings, emitEvent, Session, PrivateSessionProjection, PresenceUpdateEvent } from "@spacebar/util";
 import { Request, Response, Router } from "express";
+import { UserSettingsUpdateSchema } from "@spacebar/schemas";
 
 const router = Router({ mergeParams: true });
 
@@ -35,18 +36,15 @@ router.get(
 		},
 	}),
 	async (req: Request, res: Response) => {
-		const user = await User.findOneOrFail({
-			where: { id: req.user_id },
-			relations: ["settings"],
-		});
-		return res.json(user.settings);
+		const settings = await UserSettings.getOrDefault(req.user_id);
+		return res.json(settings);
 	},
 );
 
 router.patch(
 	"/",
 	route({
-		requestBody: "UserSettingsSchema",
+		requestBody: "UserSettingsUpdateSchema",
 		responses: {
 			200: {
 				body: "UserSettings",
@@ -60,19 +58,44 @@ router.patch(
 		},
 	}),
 	async (req: Request, res: Response) => {
-		const body = req.body as UserSettingsSchema;
-		if (body.locale === "en") body.locale = "en-US"; // fix discord client crash on unkown locale
+		const body = req.body as UserSettingsUpdateSchema;
+		if (!body) return res.status(400).json({ code: 400, message: "Invalid request body" });
+		if (body.locale === "en") body.locale = "en-US"; // fix discord client crash on unknown locale
 
 		const user = await User.findOneOrFail({
 			where: { id: req.user_id, bot: false },
 			relations: ["settings"],
 		});
 
-		user.settings.assign(body);
-		if (body.guild_folders)
-			user.settings.guild_folders = body.guild_folders;
+		if (!user.settings) user.settings = UserSettings.create<UserSettings>(body);
+		else user.settings.assign(body);
+
+		if (body.guild_folders) user.settings.guild_folders = body.guild_folders;
 
 		await user.settings.save();
+		await user.save();
+		if (body.status) {
+			const [session] = (await Session.find({
+				where: { user_id: user.id },
+			})) as [Session | undefined];
+			if (session) {
+				session.status = body.status;
+
+				await Promise.all([
+					emitEvent({
+						event: "PRESENCE_UPDATE",
+						user_id: user.id,
+						data: {
+							user: user.toPublicUser(),
+							activities: session.activities,
+							client_status: session?.client_status,
+							status: session.getPublicStatus(),
+						},
+					} as PresenceUpdateEvent),
+					session.save(),
+				]);
+			}
+		}
 
 		res.json({ ...user.settings, index: undefined });
 	},

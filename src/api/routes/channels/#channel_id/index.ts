@@ -20,14 +20,13 @@ import { route } from "@spacebar/api";
 import {
 	Channel,
 	ChannelDeleteEvent,
-	ChannelModifySchema,
-	ChannelType,
 	ChannelUpdateEvent,
 	Recipient,
 	emitEvent,
 	handleFile,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
+import { ChannelModifySchema, ChannelType } from "@spacebar/schemas"
 
 const router: Router = Router({ mergeParams: true });
 // TODO: delete channel

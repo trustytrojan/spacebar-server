@@ -28,16 +28,19 @@
 		// "moduleDetection": "auto",                        /* Control what method is used to detect module-format JS files. */
 
 		/* Modules */
-		"module": "commonjs" /* Specify what module code is generated. */,
+		"module": "NodeNext" /* Specify what module code is generated. */,
 		// "rootDir": "./src",                                  /* Specify the root folder within your source files. */
-		"moduleResolution": "node" /* Specify how TypeScript looks up a file from a given module specifier. */,
-		"baseUrl": "./src/",
+		"moduleResolution": "nodenext" /* Specify how TypeScript looks up a file from a given module specifier. */,
+		// "baseUrl": "./src/", //deprecated
 		"paths": {
-			"@spacebar/api*": ["./api"],
-			"@spacebar/gateway*": ["./gateway"],
-			"@spacebar/cdn*": ["./cdn"],
-			"@spacebar/util*": ["./util"],
-			"@spacebar/webrtc*": ["./webrtc"]
+            //"*": ["./src/*"],
+			"@spacebar/api*": ["./src/api"],
+			"@spacebar/gateway*": ["./src/gateway"],
+			"@spacebar/cdn*": ["./src/cdn"],
+			"@spacebar/util*": ["./src/util"],
+			"@spacebar/webrtc*": ["./src/webrtc"],
+			"@spacebar/schemas*": ["./src/schemas"],
+            "lambert-server*": ["./src/util/util/lambert-server"]
 		} /* Specify a set of entries that re-map imports to additional lookup locations. */,
 		// "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */
 		// "typeRoots": [],                                  /* Specify multiple folders that act like './node_modules/@types'. */

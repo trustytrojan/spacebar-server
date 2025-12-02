@@ -17,13 +17,14 @@
 */
 
 import { CLOSECODES, OPCODES, Payload, WebSocket } from "@spacebar/gateway";
-import { ErlpackType, PayloadSchema } from "@spacebar/util";
+import { ErlpackType } from "@spacebar/util";
 import fs from "node:fs/promises";
 import BigIntJson from "json-bigint";
 import path from "node:path";
 import WS from "ws";
 import OPCodeHandlers from "../opcodes";
 import { check } from "../opcodes/instanceOf";
+import { PayloadSchema } from "@spacebar/schemas"
 
 const bigIntJson = BigIntJson({ storeAsString: true });
 
@@ -44,9 +45,15 @@ export async function Message(this: WebSocket, buffer: WS.Data) {
 	) {
 		data = bigIntJson.parse(buffer.toString());
 	} else if (this.encoding === "json" && buffer instanceof Buffer) {
-		if (this.inflate) {
+		if (this.compress === "zlib-stream") {
 			try {
-				buffer = this.inflate.process(buffer);
+				buffer = this.inflate!.process(buffer);
+			} catch {
+				buffer = buffer.toString();
+			}
+		} else if (this.compress === "zstd-stream") {
+			try {
+				buffer = await this.zstdDecoder!.decode(buffer);
 			} catch {
 				buffer = buffer.toString();
 			}
@@ -82,7 +89,7 @@ export async function Message(this: WebSocket, buffer: WS.Data) {
 
 	const OPCodeHandler = OPCodeHandlers[data.op];
 	if (!OPCodeHandler) {
-		console.error("[Gateway] Unkown opcode " + data.op);
+		console.error("[Gateway] Unknown opcode " + data.op);
 		// TODO: if all opcodes are implemented comment this out:
 		// this.close(CLOSECODES.Unknown_opcode);
 		return;

@@ -12,21 +12,30 @@
       nixpkgs,
       flake-utils,
     }:
+    let
+      hashesFile = builtins.fromJSON (builtins.readFile ./hashes.json);
+      rVersion =
+        let
+          rev = self.sourceInfo.shortRev or self.sourceInfo.dirtyShortRev;
+          date = builtins.substring 0 8 self.sourceInfo.lastModifiedDate;
+          time = builtins.substring 8 6 self.sourceInfo.lastModifiedDate;
+        in
+        "preview.${date}-${time}+${rev}";
+    in
     flake-utils.lib.eachSystem flake-utils.lib.allSystems (
       system:
       let
         pkgs = import nixpkgs {
           inherit system;
         };
-        hashesFile = builtins.fromJSON (builtins.readFile ./hashes.json);
         lib = pkgs.lib;
       in
       {
         packages = {
           default = pkgs.buildNpmPackage {
             pname = "spacebar-server-ts";
-            name = "spacebar-server-ts";
             nodejs = pkgs.nodejs_24;
+            version = "1.0.0-" + rVersion;
 
             meta = with lib; {
               description = "Spacebar server, a FOSS reimplementation of the Discord backend.";
@@ -34,34 +43,49 @@
               license = licenses.agpl3Plus;
               platforms = platforms.all;
               mainProgram = "start-bundle";
+              maintainers = with maintainers; [ RorySys ]; # lol.
             };
 
             src = ./.;
-            nativeBuildInputs = with pkgs; [ python3 ];
             npmDepsHash = hashesFile.npmDepsHash;
+            npmBuildScript = "build:src";
             makeCacheWritable = true;
-            postPatch = ''
-              substituteInPlace package.json --replace 'npx patch-package' '${pkgs.nodePackages.patch-package}/bin/patch-package'
-            '';
-            installPhase = ''
+            nativeBuildInputs = with pkgs; [
+              python3
+            ];
+            installPhase =
+            let
+                revsFile = pkgs.writeText "spacebar-server-rev.json" (builtins.toJSON {
+                  rev = self.sourceInfo.rev or self.sourceInfo.dirtyRev;
+                  shortRev = self.sourceInfo.shortRev or self.sourceInfo.dirtyShortRev;
+                  lastModified = self.sourceInfo.lastModified;
+                });
+            in ''
               runHook preInstall
-              set -x
-              #remove packages not needed for production, or at least try to...
-              npm prune --omit dev --no-save $npmInstallFlags "''${npmInstallFlagsArray[@]}" $npmFlags "''${npmFlagsArray[@]}"
-              find node_modules -maxdepth 1 -type d -empty -delete
+              # set -x
 
+              # remove packages not needed for production, or at least try to...
+              npm prune --omit dev --no-save $npmInstallFlags "''${npmInstallFlagsArray[@]}" $npmFlags "''${npmFlagsArray[@]}"
+              ${./nix/trimNodeModules.sh}
+
+              # Copy outputs
+              echo "Installing package into $out"
               mkdir -p $out
               cp -r assets dist node_modules package.json $out/
+              cp ${revsFile} $out/.rev
+
+              # Create wrappers for start scripts
+              echo "Creating wrappers for start scripts"
               for i in dist/**/start.js
               do
-                makeWrapper ${pkgs.nodejs_24}/bin/node $out/bin/start-`dirname ''${i/dist\//}` --prefix NODE_PATH : $out/node_modules --add-flags $out/$i
+                makeWrapper ${pkgs.nodejs_24}/bin/node $out/bin/start-`dirname ''${i/dist\//}` --prefix NODE_PATH : $out/node_modules --add-flags --enable-source-maps --add-flags $out/$i
               done
 
-              set +x
+              # set +x
               runHook postInstall
             '';
 
-            passthru.tests = pkgs.testers.runNixOSTest (import ./nix/tests/test_1.nix self);
+            passthru.tests = pkgs.testers.runNixOSTest (import ./nix/tests/test-bundle-starts.nix self);
           };
 
           update-nix-hashes = pkgs.writeShellApplication {
@@ -96,10 +120,10 @@
 
         containers.docker = pkgs.dockerTools.buildLayeredImage {
           name = "spacebar-server-ts";
-          tag = "latest";
+          tag = builtins.replaceStrings [ "+" ] [ "_" ] self.packages.${system}.default.version;
           contents = [ self.packages.${system}.default ];
           config = {
-            Cmd = [ "${self.outputs.packages.x86_64-linux.default}/bin/start-bundle" ];
+            Cmd = [ "${self.outputs.packages.${system}.default}/bin/start-bundle" ];
             Expose = [ "3001" ];
           };
         };
@@ -108,15 +132,23 @@
           buildInputs = with pkgs; [
             nodejs_24
             nodePackages.typescript
-            nodePackages.ts-node
             nodePackages.patch-package
             nodePackages.prettier
           ];
         };
       }
     )
-    //
-    {
+    // {
       nixosModules.default = import ./nix/modules/default self;
+      checks =
+        let
+          pkgs = import nixpkgs { system = "x86_64-linux"; };
+        in
+        pkgs.lib.recursiveUpdate (pkgs.lib.attrsets.unionOfDisjoint { } self.packages) {
+          x86_64-linux = {
+            spacebar-server-tests = self.packages.x86_64-linux.default.passthru.tests;
+            docker-image = self.containers.x86_64-linux.docker;
+          };
+        };
     };
 }

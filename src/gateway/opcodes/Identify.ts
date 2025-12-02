@@ -20,21 +20,15 @@ import { CLOSECODES, Capabilities, OPCODES, Payload, Send, WebSocket, setupListe
 import {
 	Application,
 	Config,
-	DMChannel,
-	DefaultUserGuildSettings,
 	EVENTEnum,
 	Guild,
 	GuildOrUnavailable,
-	IdentifySchema,
 	Intents,
 	Member,
 	MemberPrivateProjection,
 	OPCodes,
 	PresenceUpdateEvent,
 	PrivateSessionProjection,
-	PrivateUserProjection,
-	PublicUser,
-	PublicUserProjection,
 	ReadState,
 	ReadyEventData,
 	ReadyGuildDTO,
@@ -55,19 +49,28 @@ import {
 	Emoji,
 	Role,
 	Sticker,
-	VoiceState, UserSettingsProtos,
+	VoiceState,
+	UserSettingsProtos,
 } from "@spacebar/util";
 import { check } from "./instanceOf";
 import { In } from "typeorm";
 import { PreloadedUserSettings } from "discord-protos";
+import { DefaultUserGuildSettings, DMChannel, IdentifySchema, PrivateUserProjection, PublicUser, PublicUserProjection } from "@spacebar/schemas";
 
 // TODO: user sharding
 // TODO: check privileged intents, if defined in the config
 
+function logAuth(message: string) {
+	if (process.env.LOG_AUTH != "true") return;
+	console.log(`[Gateway/Auth] ${message}`);
+}
+
 const tryGetUserFromToken = async (...args: Parameters<typeof checkToken>) => {
+	logAuth("Checking token");
 	try {
 		return (await checkToken(...args)).user;
 	} catch (e) {
+		console.log("[Gateway] Error when identifying: ", e);
 		return null;
 	}
 };
@@ -94,9 +97,12 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 
 	const user = await tryGetUserFromToken(identify.token, {
 		relations: ["relationships", "relationships.to", "settings"],
-		select: [...PrivateUserProjection, "relationships"],
+		select: [...PrivateUserProjection, "relationships", "rights"],
 	});
-	if (!user) return this.close(CLOSECODES.Authentication_failed);
+	if (!user) {
+		console.log("[Gateway] Failed to identify user");
+		return this.close(CLOSECODES.Authentication_failed);
+	}
 	this.user_id = user.id;
 	const userQueryTime = taskSw.getElapsedAndReset();
 
@@ -256,7 +262,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 		timePromise(() =>
 			UserSettingsProtos.findOne({
 				where: { user_id: this.user_id },
-			})
+			}),
 		),
 		timePromise(() =>
 			Channel.find({
@@ -337,8 +343,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 	});
 
 	for (const call of mergeMemberGuildsTrace.calls!) {
-		if (typeof call !== "string")
-			mergeMemberGuildsTrace.micros += (call as { micros: number }).micros;
+		if (typeof call !== "string") mergeMemberGuildsTrace.micros += (call as { micros: number }).micros;
 	}
 
 	const totalQueryTime = taskSw.getElapsedAndReset();
@@ -348,8 +353,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 	// so for instances that migrated, users may not have a `user_settings` row.
 	let createUserSettingsTime: ElapsedTime | undefined = undefined;
 	if (!user.settings) {
-		user.settings = new UserSettings();
-		await user.settings.save();
+		user.settings = await UserSettings.getOrDefault(user.id);
 		createUserSettingsTime = taskSw.getElapsedAndReset();
 	}
 
@@ -359,9 +363,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 			{
 				...x,
 				// filter out @everyone role
-				roles: x.roles
-					.filter((r) => r.id !== x.guild.id)
-					.map((x) => x.id),
+				roles: x.roles.filter((r) => r.id !== x.guild.id).map((x) => x.id),
 
 				// add back user, which we don't fetch from db
 				// TODO: For guild profiles, this may need to be changed.
@@ -450,14 +452,16 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 			const channelUsers = channel.recipients?.map((recipient) => recipient.user.toPublicUser());
 
 			if (channelUsers && channelUsers.length > 0) channelUsers.forEach((user) => users.add(user));
-
 			return {
 				id: channel.id,
 				flags: channel.flags,
 				last_message_id: channel.last_message_id,
 				type: channel.type,
 				recipients: channelUsers || [],
+				icon: channel.icon,
+				name: channel.name,
 				is_spam: false, // TODO
+				owner_id: channel.owner_id || undefined,
 			};
 		});
 	const generateDmChannelsTime = taskSw.getElapsedAndReset();
@@ -499,7 +503,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 					user: user.toPublicUser(),
 					activities: session.activities,
 					client_status: session.client_status,
-					status: session.status,
+					status: session.getPublicStatus(),
 				},
 			} as PresenceUpdateEvent),
 		),
@@ -515,7 +519,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 	const d: ReadyEventData = {
 		v: 9,
 		application: application ? { id: application.id, flags: application.flags } : undefined,
-		user: user.toPrivateUser(),
+		user: user.toPrivateUser(["rights"]),
 		user_settings: user.settings,
 		user_settings_proto: settingsProtos?.userSettings ? PreloadedUserSettings.toBase64(settingsProtos.userSettings) : undefined,
 		user_settings_proto_json: settingsProtos?.userSettings ? PreloadedUserSettings.toJson(settingsProtos.userSettings) : undefined,
@@ -617,7 +621,7 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 					}
 				}
 
-				val.calls.push("mergeMemberGuildsTrace", mergeMemberGuildsTrace)
+				val.calls.push("mergeMemberGuildsTrace", mergeMemberGuildsTrace);
 			}
 		}
 	}
@@ -700,5 +704,5 @@ export async function onIdentify(this: WebSocket, data: Payload) {
 
 	const setupListenerTime = Date.now();
 
-	console.log(`[Gateway] IDENTIFY ${this.user_id} in ${totalSw.elapsed().totalMilliseconds}ms`, JSON.stringify(d._trace, null, 2));
+	console.log(`[Gateway] IDENTIFY ${this.user_id} in ${totalSw.elapsed().totalMilliseconds}ms`, process.env.LOG_GATEWAY_TRACES ? JSON.stringify(d._trace, null, 2) : "");
 }

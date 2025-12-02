@@ -18,8 +18,8 @@
 
 import { Request } from "express";
 import { Column, Entity, FindOneOptions, JoinColumn, OneToMany, OneToOne } from "typeorm";
-import { Channel, ChannelType, Config, Email, FieldErrors, Snowflake, trimSpecial } from "@spacebar/util";
-import { BitField } from "../util/BitField";
+import { Channel, Config, Email, FieldErrors, Snowflake, trimSpecial } from "..";
+import { Random } from "../util";
 import { BaseClass } from "./BaseClass";
 import { ConnectedAccount } from "./ConnectedAccount";
 import { Member } from "./Member";
@@ -27,52 +27,7 @@ import { Relationship } from "./Relationship";
 import { SecurityKey } from "./SecurityKey";
 import { Session } from "./Session";
 import { UserSettings } from "./UserSettings";
-
-export enum PublicUserEnum {
-	username,
-	discriminator,
-	id,
-	public_flags,
-	avatar,
-	accent_color,
-	banner,
-	bio,
-	bot,
-	premium_since,
-	premium_type,
-	theme_colors,
-	pronouns,
-	badge_ids,
-}
-export type PublicUserKeys = keyof typeof PublicUserEnum;
-
-export enum PrivateUserEnum {
-	flags,
-	mfa_enabled,
-	email,
-	phone,
-	verified,
-	nsfw_allowed,
-	premium,
-	premium_type,
-	purchased_flags,
-	premium_usage_flags,
-	disabled,
-	// settings,	// now a relation
-	// locale
-}
-export type PrivateUserKeys = keyof typeof PrivateUserEnum | PublicUserKeys;
-
-export const PublicUserProjection = Object.values(PublicUserEnum).filter((x) => typeof x === "string") as PublicUserKeys[];
-export const PrivateUserProjection = [...PublicUserProjection, ...Object.values(PrivateUserEnum).filter((x) => typeof x === "string")] as PrivateUserKeys[];
-
-// Private user data that should never get sent to the client
-export type PublicUser = Pick<User, PublicUserKeys>;
-export type PrivateUser = Pick<User, PrivateUserKeys>;
-
-export interface UserPrivate extends Pick<User, PrivateUserKeys> {
-	locale: string;
-}
+import { ChannelType, PrivateUserProjection, PublicUser, PublicUserProjection, UserPrivate } from "@spacebar/schemas";
 
 @Entity({
 	name: "users",
@@ -158,13 +113,13 @@ export class User extends BaseClass {
 	@Column({ nullable: true, select: false })
 	email?: string; // email of the user
 
-	@Column()
+	@Column({ type: "bigint" })
 	flags: number = 0; // UserFlags // TODO: generate
 
-	@Column()
+	@Column({ type: "bigint" })
 	public_flags: number = 0;
 
-	@Column()
+	@Column({ type: "bigint" })
 	purchased_flags: number = 0;
 
 	@Column()
@@ -202,10 +157,10 @@ export class User extends BaseClass {
 	@OneToOne(() => UserSettings, {
 		cascade: true,
 		orphanedRowAction: "delete",
-		eager: false,
+		nullable: true,
 	})
 	@JoinColumn()
-	settings: UserSettings;
+	settings?: UserSettings;
 
 	// workaround to prevent fossord-unaware clients from deleting settings not used by them
 	@Column({ type: "simple-json", select: false })
@@ -242,10 +197,10 @@ export class User extends BaseClass {
 		return user as PublicUser;
 	}
 
-	toPrivateUser() {
+	toPrivateUser(extraFields: (keyof User)[] = []) {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const user: any = {};
-		PrivateUserProjection.forEach((x) => {
+		[...PrivateUserProjection, ...extraFields].forEach((x) => {
 			user[x] = this[x];
 		});
 		return user as UserPrivate;
@@ -284,7 +239,7 @@ export class User extends BaseClass {
 			// randomly generates a discriminator between 1 and 9999 and checks max five times if it already exists
 			// TODO: is there any better way to generate a random discriminator only once, without checking if it already exists in the database?
 			for (let tries = 0; tries < 5; tries++) {
-				const discriminator = Math.randomIntBetween(1, 9999).toString().padStart(4, "0");
+				const discriminator = Random.nextInt(1, 9999).toString().padStart(4, "0");
 				const exists = await User.findOne({
 					where: { discriminator, username: username },
 					select: ["id"],
@@ -302,6 +257,7 @@ export class User extends BaseClass {
 		password,
 		id,
 		req,
+		bot,
 	}: {
 		username: string;
 		password?: string;
@@ -309,6 +265,7 @@ export class User extends BaseClass {
 		date_of_birth?: Date; // "2000-04-03"
 		id?: string;
 		req?: Request;
+		bot?: boolean;
 	}) {
 		// trim special uf8 control characters -> Backspace, Newline, ...
 		username = trimSpecial(username);
@@ -351,6 +308,7 @@ export class User extends BaseClass {
 			premium_type: Config.get().defaults.user.premiumType ?? 0,
 			verified: Config.get().defaults.user.verified ?? true,
 			created_at: new Date(),
+			bot: !!bot,
 		});
 
 		user.validate();
@@ -364,6 +322,12 @@ export class User extends BaseClass {
 		}
 
 		setImmediate(async () => {
+			if (bot) {
+				const { guild } = Config.get();
+				if (!guild.autoJoin.bots) {
+					return;
+				}
+			}
 			if (Config.get().guild.autoJoin.enabled) {
 				for (const guild of Config.get().guild.autoJoin.guilds || []) {
 					await Member.addToGuild(user.id, guild).catch((e) => console.error("[Autojoin]", e));
@@ -390,36 +354,9 @@ export class User extends BaseClass {
 			for (const channel of qry) {
 				console.warn(JSON.stringify(channel));
 			}
+			throw new Error("Array contains more than one matching element");
 		}
 
-		// throw if multiple
-		return qry.single((_) => true);
+		return qry[0];
 	}
-}
-
-export const CUSTOM_USER_FLAG_OFFSET = BigInt(1) << BigInt(32);
-
-export class UserFlags extends BitField {
-	static FLAGS = {
-		DISCORD_EMPLOYEE: BigInt(1) << BigInt(0),
-		PARTNERED_SERVER_OWNER: BigInt(1) << BigInt(1),
-		HYPESQUAD_EVENTS: BigInt(1) << BigInt(2),
-		BUGHUNTER_LEVEL_1: BigInt(1) << BigInt(3),
-		MFA_SMS: BigInt(1) << BigInt(4),
-		PREMIUM_PROMO_DISMISSED: BigInt(1) << BigInt(5),
-		HOUSE_BRAVERY: BigInt(1) << BigInt(6),
-		HOUSE_BRILLIANCE: BigInt(1) << BigInt(7),
-		HOUSE_BALANCE: BigInt(1) << BigInt(8),
-		EARLY_SUPPORTER: BigInt(1) << BigInt(9),
-		TEAM_USER: BigInt(1) << BigInt(10),
-		TRUST_AND_SAFETY: BigInt(1) << BigInt(11),
-		SYSTEM: BigInt(1) << BigInt(12),
-		HAS_UNREAD_URGENT_MESSAGES: BigInt(1) << BigInt(13),
-		BUGHUNTER_LEVEL_2: BigInt(1) << BigInt(14),
-		UNDERAGE_DELETED: BigInt(1) << BigInt(15),
-		VERIFIED_BOT: BigInt(1) << BigInt(16),
-		EARLY_VERIFIED_BOT_DEVELOPER: BigInt(1) << BigInt(17),
-		CERTIFIED_MODERATOR: BigInt(1) << BigInt(18),
-		BOT_HTTP_INTERACTIONS: BigInt(1) << BigInt(19),
-	};
 }

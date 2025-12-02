@@ -22,7 +22,6 @@ import {
 	Attachment,
 	Channel,
 	Config,
-	Embed,
 	EmbedCache,
 	emitEvent,
 	EVERYONE_MENTION,
@@ -32,8 +31,6 @@ import {
 	HERE_MENTION,
 	Message,
 	MessageCreateEvent,
-	MessageCreateSchema,
-	MessageType,
 	MessageUpdateEvent,
 	Role,
 	ROLE_MENTION,
@@ -45,14 +42,15 @@ import {
 	handleFile,
 	Permissions,
 	normalizeUrl,
-	Reaction,
-	MessageCreateCloudAttachment,
-	MessageCreateAttachment,
+	DiscordApiErrors,
+	CloudAttachment,
+	ReadState,
+	Member,
+	Session,
 } from "@spacebar/util";
 import { HTTPError } from "lambert-server";
-import { In } from "typeorm";
-import fetch from "node-fetch-commonjs";
-import { CloudAttachment } from "../../../util/entities/CloudAttachment";
+import { In, Or, Equal, IsNull } from "typeorm";
+import { ChannelType, Embed, EmbedType, MessageCreateAttachment, MessageCreateCloudAttachment, MessageCreateSchema, MessageType, Reaction } from "@spacebar/schemas";
 const allow_empty = false;
 // TODO: check webhook, application, system author, stickers
 // TODO: embed gifs/videos/images
@@ -65,6 +63,21 @@ export async function handleMessage(opts: MessageOptions): Promise<Message> {
 		relations: ["recipients"],
 	});
 	if (!channel || !opts.channel_id) throw new HTTPError("Channel not found", 404);
+
+	let permission: undefined | Permissions;
+	const limit = channel.rate_limit_per_user;
+
+	if (limit) {
+		const lastMsgTime = (await Message.findOne({ where: { channel_id: channel.id, author_id: opts.author_id }, select: { timestamp: true }, order: { timestamp: "DESC" } }))
+			?.timestamp;
+		if (lastMsgTime && Date.now() - limit * 1000 < +lastMsgTime) {
+			permission ||= await getPermission(opts.author_id, channel.guild_id, channel);
+			//FIXME MANAGE_MESSAGES and MANAGE_CHANNELS will need to be removed once they're gone as checks
+			if (!permission.has("MANAGE_MESSAGES") && !permission.has("MANAGE_CHANNELS") && !permission.has("BYPASS_SLOWMODE")) {
+				throw DiscordApiErrors.SLOWMODE_RATE_LIMIT;
+			}
+		}
+	}
 
 	const stickers = opts.sticker_ids ? await Sticker.find({ where: { id: In(opts.sticker_ids) } }) : undefined;
 	// cloud attachments with indexes
@@ -89,7 +102,9 @@ export async function handleMessage(opts: MessageOptions): Promise<Message> {
 		reactions: opts.reactions || [],
 		type: opts.type ?? 0,
 		mentions: [],
+		components: opts.components ?? undefined, // Fix Discord-Go?
 	});
+	const ephermal = (message.flags & (1 << 6)) !== 0;
 
 	if (cloudAttachments && cloudAttachments.length > 0) {
 		console.log("[Message] Processing attachments for message", message.id, ":", message.attachments);
@@ -153,7 +168,6 @@ export async function handleMessage(opts: MessageOptions): Promise<Message> {
 		});
 	}
 
-	let permission: undefined | Permissions;
 	if (opts.webhook_id) {
 		message.webhook = await Webhook.findOneOrFail({
 			where: { id: opts.webhook_id },
@@ -191,7 +205,7 @@ export async function handleMessage(opts: MessageOptions): Promise<Message> {
 		}
 		if (opts.avatar_url) {
 			const avatarData = await fetch(opts.avatar_url);
-			const base64 = await avatarData.buffer().then((x) => x.toString("base64"));
+			const base64 = await avatarData.arrayBuffer().then((x) => Buffer.from(x).toString("base64"));
 
 			const dataUri = "data:" + avatarData.headers.get("content-type") + ";base64," + base64;
 
@@ -199,7 +213,7 @@ export async function handleMessage(opts: MessageOptions): Promise<Message> {
 			message.author.avatar = message.avatar;
 		}
 	} else {
-		permission = await getPermission(opts.author_id, channel.guild_id, opts.channel_id);
+		permission ||= await getPermission(opts.author_id, channel.guild_id, channel);
 		permission.hasThrow("SEND_MESSAGES");
 		if (permission.cache.member) {
 			message.member = permission.cache.member;
@@ -304,10 +318,93 @@ export async function handleMessage(opts: MessageOptions): Promise<Message> {
 	/*message.mention_channels = mention_channel_ids.map((x) =>
 		Channel.create({ id: x }),
 	);*/
-	message.mention_roles = mention_role_ids.map((x) => Role.create({ id: x }));
-	message.mentions = [...message.mentions, ...mention_user_ids.map((x) => User.create({ id: x }))];
+	message.mention_roles = (
+		await Promise.all(
+			mention_role_ids.map((x) => {
+				return Role.findOne({ where: { id: x } });
+			}),
+		)
+	).filter((role) => role !== null);
+
+	message.mentions = [
+		...message.mentions,
+		...(
+			await Promise.all(
+				mention_user_ids.map((x) => {
+					return User.findOne({ where: { id: x } });
+				}),
+			)
+		).filter((user) => user !== null),
+	];
 
 	message.mention_everyone = mention_everyone;
+	async function fillInMissingIDs(ids: string[]) {
+		const states = await ReadState.findBy({
+			user_id: Or(...ids.map((id) => Equal(id))),
+			channel_id: channel.id,
+		});
+		const users = new Set(ids);
+		states.forEach((state) => users.delete(state.user_id));
+		if (!users.size) {
+			return;
+		}
+		return Promise.all(
+			[...users].map((user_id) => {
+				return ReadState.create({ user_id, channel_id: channel.id }).save();
+			}),
+		);
+	}
+	if (ephermal) {
+		const id = message.interaction_metadata?.user_id;
+		if (id) {
+			let pinged = mention_everyone || channel.type === ChannelType.DM || channel.type === ChannelType.GROUP_DM;
+			if (!pinged) pinged = !!message.mentions.find((user) => user.id === id);
+			if (!pinged) pinged = !!(await Member.find({ where: { id, roles: Or(...message.mention_roles.map(({ id }) => Equal(id))) } }));
+			if (pinged) {
+				//stuff
+			}
+		}
+	} else if ((!!message.content?.match(EVERYONE_MENTION) && permission?.has("MENTION_EVERYONE")) || channel.type === ChannelType.DM || channel.type === ChannelType.GROUP_DM) {
+		if (channel.type === ChannelType.DM || channel.type === ChannelType.GROUP_DM) {
+			if (channel.recipients) {
+				await fillInMissingIDs(channel.recipients.map(({ user_id }) => user_id));
+			}
+		} else {
+			console.log(channel.guild_id);
+			await fillInMissingIDs((await Member.find({ where: { guild_id: channel.guild_id } })).map(({ id }) => id));
+		}
+		const repository = ReadState.getRepository();
+		const condition = { channel_id: channel.id };
+		await repository.update({ ...condition, mention_count: IsNull() }, { mention_count: 0 });
+		await repository.increment(condition, "mention_count", 1);
+	} else {
+		const users = new Set<string>([
+			...(message.mention_roles.length
+				? await Member.find({
+						where: [
+							...message.mention_roles.map((role) => {
+								return { roles: { id: role.id } };
+							}),
+						],
+					})
+				: []
+			).map((member) => member.id),
+			...message.mentions.map((user) => user.id),
+		]);
+		if (!!message.content?.match(HERE_MENTION) && permission?.has("MENTION_EVERYONE")) {
+			const ids = (await Member.find({ where: { guild_id: channel.guild_id } })).map(({ id }) => id);
+			(await Session.find({ where: { user_id: Or(...ids.map((id) => Equal(id))) } })).forEach(({ user_id }) => users.add(user_id));
+		}
+		if (users.size) {
+			const repository = ReadState.getRepository();
+			const condition = { user_id: Or(...[...users].map((id) => Equal(id))), channel_id: channel.id };
+
+			await fillInMissingIDs([...users]);
+
+			await repository.update({ ...condition, mention_count: IsNull() }, { mention_count: 0 });
+			await repository.increment(condition, "mention_count", 1);
+		}
+	}
 
 	// TODO: check and put it all in the body
 
@@ -336,6 +433,11 @@ export async function postHandleMessage(message: Message) {
 		}
 	}
 
+	data.embeds.forEach((embed) => {
+		if (!embed.type) {
+			embed.type = EmbedType.rich;
+		}
+	});
 	// Filter out embeds that could be links, start from scratch
 	data.embeds = data.embeds.filter((embed) => embed.type === "rich");
 
@@ -362,18 +464,17 @@ export async function postHandleMessage(message: Message) {
 
 	if (uniqueLinks.length === 0) {
 		// No valid unique links found, update message to remove old embeds
-		data.embeds = data.embeds.filter((embed) => {
-			const hasUrl = !!embed.url;
-			return !hasUrl;
-		});
-		await Promise.all([
-			emitEvent({
-				event: "MESSAGE_UPDATE",
-				channel_id: message.channel_id,
-				data,
-			} as MessageUpdateEvent),
-			Message.update({ id: message.id, channel_id: message.channel_id }, { embeds: data.embeds }),
-		]);
+		data.embeds = data.embeds.filter((embed) => embed.type === "rich");
+		const author = data.author?.toPublicUser();
+		const event = {
+			event: "MESSAGE_UPDATE",
+			channel_id: message.channel_id,
+			data: {
+				...data,
+				author,
+			},
+		} as MessageUpdateEvent;
+		await Promise.all([emitEvent(event), Message.update({ id: message.id, channel_id: message.channel_id }, { embeds: data.embeds })]);
 		return;
 	}
 
@@ -438,11 +539,12 @@ export async function postHandleMessage(message: Message) {
 export async function sendMessage(opts: MessageOptions) {
 	const message = await handleMessage({ ...opts, timestamp: new Date() });
 
+	const ephermal = (message.flags & (1 << 6)) !== 0;
 	await Promise.all([
 		Message.insert(message),
 		emitEvent({
 			event: "MESSAGE_CREATE",
-			channel_id: opts.channel_id,
+			...(ephermal ? { user_id: message.interaction_metadata?.user_id } : { channel_id: message.channel_id }),
 			data: message.toJSON(),
 		} as MessageCreateEvent),
 	]);

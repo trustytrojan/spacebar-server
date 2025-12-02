@@ -21,14 +21,11 @@ import { Request, Response, Router } from "express";
 import {
 	emitEvent,
 	OrmUtils,
-	SettingsProtoJsonResponse,
-	SettingsProtoResponse,
-	SettingsProtoUpdateJsonSchema,
-	SettingsProtoUpdateSchema,
 	UserSettingsProtos,
 } from "@spacebar/util";
 import { PreloadedUserSettings } from "discord-protos";
 import { JsonValue } from "@protobuf-ts/runtime";
+import { SettingsProtoJsonResponse, SettingsProtoResponse, SettingsProtoUpdateJsonSchema, SettingsProtoUpdateSchema } from "@spacebar/schemas"
 
 const router: Router = Router({ mergeParams: true });
 
@@ -50,7 +47,7 @@ router.get(
 		},
 	}),
 	async (req: Request, res: Response) => {
-		const userSettings = await UserSettingsProtos.getOrCreate(req.user_id);
+		const userSettings = await UserSettingsProtos.getOrDefault(req.user_id);
 
 		res.json({
 			settings: PreloadedUserSettings.toBase64(
@@ -102,7 +99,7 @@ router.get(
 		},
 	}),
 	async (req: Request, res: Response) => {
-		const userSettings = await UserSettingsProtos.getOrCreate(req.user_id);
+		const userSettings = await UserSettingsProtos.getOrDefault(req.user_id);
 
 		res.json({
 			settings: PreloadedUserSettings.toJson(userSettings.userSettings!),
@@ -155,7 +152,7 @@ async function patchUserSettings(
 	required_data_version: number | undefined,
 	atomic: boolean = false,
 ) {
-	const userSettings = await UserSettingsProtos.getOrCreate(userId);
+	const userSettings = await UserSettingsProtos.getOrDefault(userId);
 	let settings = userSettings.userSettings!;
 
 	if (
@@ -169,10 +166,11 @@ async function patchUserSettings(
 		};
 	}
 
-	console.log(
-		`Updating user settings for user ${userId} with atomic=${atomic}:`,
-		updatedSettings,
-	);
+	if ((process.env.LOG_PROTO_UPDATES || process.env.LOG_PROTO_SETTINGS_UPDATES) && process.env.LOG_PROTO_SETTINGS_UPDATES !== "false")
+		console.log(
+			`Updating user settings for user ${userId} with atomic=${atomic}:`,
+			updatedSettings,
+		);
 
 	if (!atomic) {
 		settings = PreloadedUserSettings.fromJson(

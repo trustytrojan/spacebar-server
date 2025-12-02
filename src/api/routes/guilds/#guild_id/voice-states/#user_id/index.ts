@@ -19,15 +19,14 @@
 import { route } from "@spacebar/api";
 import {
 	Channel,
-	ChannelType,
 	DiscordApiErrors,
 	emitEvent,
 	getPermission,
 	VoiceState,
 	VoiceStateUpdateEvent,
-	VoiceStateUpdateSchema,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
+import { ChannelType, VoiceStateUpdateSchema } from "@spacebar/schemas";
 
 const router = Router({ mergeParams: true });
 //TODO need more testing when community guild and voice stage channel are working

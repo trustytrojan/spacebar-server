@@ -25,12 +25,17 @@ import {
 	RightResolvable,
 	Rights,
 	SpacebarApiErrors,
-	ajv,
 	getPermission,
 	getRights,
 } from "@spacebar/util";
 import { AnyValidateFunction } from "ajv/dist/core.js";
 import { NextFunction, Request, Response } from "express";
+import { ajv } from "@spacebar/schemas"
+
+const ignoredRequestSchemas = [
+	// skip validation for settings proto JSON updates - TODO: figure out if this even possible to fix?
+	"SettingsProtoUpdateJsonSchema"
+]
 
 declare global {
 	// TODO: fix this
@@ -82,7 +87,13 @@ export interface RouteOptions {
 export function route(opts: RouteOptions) {
 	let validate: AnyValidateFunction | undefined;
 	if (opts.requestBody) {
-		validate = ajv.getSchema(opts.requestBody);
+		try {
+			validate = ajv.getSchema(opts.requestBody);
+		} catch (e) {
+			console.error("AJV getSchema failed!");
+			throw e;
+		}
+
 		if (!validate)
 			throw new Error(`Body schema ${opts.requestBody} not found`);
 	}
@@ -119,7 +130,8 @@ export function route(opts: RouteOptions) {
 			}
 		}
 
-		if (validate) {
+
+		if (validate && !ignoredRequestSchemas.includes(opts.requestBody!)) {
 			const valid = validate(req.body);
 			if (!valid) {
 				const fields: Record<
@@ -135,10 +147,10 @@ export function route(opts: RouteOptions) {
 				);
 				if (process.env.LOG_VALIDATION_ERRORS)
 					console.log(
-						`[VALIDATION ERROR] ${req.method} ${req.originalUrl} -`,
+						`[VALIDATION ERROR] ${req.method} ${req.originalUrl} - SCHEMA='${opts.requestBody}' -`,
 						validate?.errors,
 					);
-				throw FieldErrors(fields);
+				throw FieldErrors(fields, validate.errors!);
 			}
 		}
 		next();

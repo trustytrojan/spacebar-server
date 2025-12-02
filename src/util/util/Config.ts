@@ -31,9 +31,9 @@ let pairs: ConfigEntity[];
 // TODO: use events to inform about config updates
 // Config keys are separated with _
 
-export const Config = {
-	init: async function init() {
-		if (config) return config;
+export class Config {
+	public static async init(force: boolean = false) {
+		if (config && !force) return config;
 		console.log("[Config] Loading configuration...");
 		if (!process.env.CONFIG_PATH) {
 			pairs = await validateConfig();
@@ -55,11 +55,11 @@ export const Config = {
 		config = OrmUtils.mergeDeep({}, { ...new ConfigValue() }, config);
 
 		return this.set(config);
-	},
-	get: function get() {
+	};
+	public static get() {
 		if (!config) {
 			// If we haven't initialised the config yet, return default config.
-			// Typeorm instantiates each entity once when initising database,
+			// Typeorm instantiates each entity once when initialising database,
 			// which means when we use config values as default values in entity classes,
 			// the config isn't initialised yet and would throw an error about the config being undefined.
 
@@ -67,14 +67,14 @@ export const Config = {
 		}
 
 		return config;
-	},
-	set: function set(val: Partial<ConfigValue>) {
+	};
+	public static set(val: Partial<ConfigValue>) {
 		if (!config || !val) return;
-		config = val.merge(config);
+		config = OrmUtils.mergeDeep(config);
 
 		return applyConfig(config);
-	},
-};
+	};
+}
 
 // TODO: better types
 const generatePairs = (obj: object | null, key = ""): ConfigEntity[] => {
@@ -100,7 +100,8 @@ async function applyConfig(val: ConfigValue) {
 		else console.log("[WARNING] JSON config file in use, and writing is disabled! Programmatic config changes will not be persisted, and your config will not get updated!");
 	else {
 		const pairs = generatePairs(val);
-		await Promise.all(pairs.map((pair) => pair.save()));
+		// keys are sorted to try to influence database order...
+		await Promise.all(pairs.sort((x, y) => x.key > y.key ? 1 : -1).map((pair) => pair.save()));
 	}
 	return val;
 }
@@ -134,9 +135,13 @@ function pairsToConfig(pairs: ConfigEntity[]) {
 
 const validateConfig = async () => {
 	let hasErrored = false;
+	const totalStartTime = new Date();
 	const config = await ConfigEntity.find({ select: { key: true } });
 
 	for (const row in config) {
+		// extension methods...
+		if(typeof config[row] === "function") continue;
+
 		try {
 			const found = await ConfigEntity.findOne({
 				where: { key: config[row].key },
@@ -153,9 +158,11 @@ const validateConfig = async () => {
 		}
 	}
 
+	console.log("[Config] Total config load time:", new Date().getTime() - totalStartTime.getTime(), "ms");
+
 	if (hasErrored) {
 		console.error(
-			"Your config has invalid values. Fix them first https://docs.spacebar.chat/setup/server/configuration",
+			"[Config] Your config has invalid values. Fix them first https://docs.spacebar.chat/setup/server/configuration",
 		);
 		process.exit(1);
 	}

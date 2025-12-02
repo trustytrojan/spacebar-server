@@ -28,6 +28,8 @@ import { Message } from "./Message";
 import { Deflate, Inflate } from "fast-zlib";
 import { URL } from "node:url";
 import { Config, ErlpackType } from "@spacebar/util";
+import zlib from "node:zlib";
+import { Decoder, Encoder } from "@toondepauw/node-zstd";
 
 let erlpack: ErlpackType | null = null;
 try {
@@ -107,7 +109,7 @@ export async function Connection(
 			return socket.close(CLOSECODES.Decode_error);
 
 		if (socket.encoding === "etf" && !erlpack)
-			throw new Error("Erlpack is not installed: 'npm i erlpack'");
+			throw new Error("Erlpack is not installed: 'npm i @yukikaze-bot/erlpack'");
 
 		socket.version = Number(searchParams.get("version")) || 8;
 		if (socket.version != 8)
@@ -116,10 +118,15 @@ export async function Connection(
 		// @ts-ignore
 		socket.compress = searchParams.get("compress") || "";
 		if (socket.compress) {
-			if (socket.compress !== "zlib-stream")
+			if (socket.compress === "zlib-stream") {
+				socket.deflate = new Deflate();
+				socket.inflate = new Inflate();
+			} else if (socket.compress === "zstd-stream") {
+				socket.zstdEncoder = new Encoder(6);
+				socket.zstdDecoder = new Decoder();
+			} else {
 				return socket.close(CLOSECODES.Decode_error);
-			socket.deflate = new Deflate();
-			socket.inflate = new Inflate();
+			}
 		}
 
 		socket.events = {};

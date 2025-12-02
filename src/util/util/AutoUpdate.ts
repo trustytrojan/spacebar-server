@@ -16,13 +16,9 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import "missing-native-js-functions";
-import fetch from "node-fetch-commonjs";
-import { ProxyAgent } from "proxy-agent";
-import readline from "readline";
+import readline from "node:readline";
 import fs from "node:fs/promises";
 import path from "node:path";
-import http from "node:http";
 
 const rl = readline.createInterface({
 	input: process.stdin,
@@ -57,9 +53,9 @@ export function enableAutoUpdate(opts: {
 		const latestVersion = await getLatestVersion(opts.packageJsonLink);
 		if (currentVersion !== latestVersion) {
 			rl.question(
-				`[Auto Update] Current version (${currentVersion}) is out of date, would you like to update? (yes/no)`,
+				`[Auto Update] Current version (${currentVersion}) is out of date, would you like to update? (Y/n)`,
 				(answer) => {
-					if (answer.toBoolean()) {
+					if (answer === "" || answer.toLowerCase() === "y") {
 						console.log(`[Auto update] updating ...`);
 						download(opts.downloadUrl, opts.path);
 					} else {
@@ -75,9 +71,8 @@ async function download(url: string, dir: string) {
 	try {
 		// TODO: use file stream instead of buffer (to prevent crash because of high memory usage for big files)
 		// TODO check file hash
-		const agent = new ProxyAgent();
-		const response = await fetch(url, { agent: agent as http.Agent });
-		const buffer = await response.buffer();
+		const response = await fetch(url);
+		const buffer = await response.bytes();
 		const tempDir = await fs.mkdtemp("spacebar");
 		await fs.writeFile(path.join(tempDir, "Spacebar.zip"), buffer);
 	} catch (error) {
@@ -98,8 +93,7 @@ async function getCurrentVersion(dir: string) {
 
 async function getLatestVersion(url: string) {
 	try {
-		const agent = new ProxyAgent();
-		const response = await fetch(url, { agent: agent as http.Agent });
+		const response = await fetch(url);
 		const content = (await response.json()) as { version: string };
 		return content.version;
 	} catch (error) {

@@ -20,17 +20,17 @@ import { route } from "@spacebar/api";
 import {
 	GuildStickersUpdateEvent,
 	Member,
-	ModifyGuildStickerSchema,
 	Snowflake,
 	Sticker,
-	StickerFormatType,
-	StickerType,
 	emitEvent,
 	uploadFile,
+	Config,
+	DiscordApiErrors,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server";
 import multer from "multer";
+import { ModifyGuildStickerSchema, StickerFormatType, StickerType } from "@spacebar/schemas";
 const router = Router({ mergeParams: true });
 
 router.get(
@@ -86,6 +86,16 @@ router.post(
 		const { guild_id } = req.params;
 		const body = req.body as ModifyGuildStickerSchema;
 		const id = Snowflake.generate();
+
+		const sticker_count = await Sticker.count({
+			where: { guild_id: guild_id },
+		});
+		const { maxStickers } = Config.get().limits.guild;
+
+		if (sticker_count >= maxStickers)
+			throw DiscordApiErrors.MAXIMUM_STICKERS.withParams(
+				maxStickers,
+			);
 
 		const [sticker] = await Promise.all([
 			Sticker.create({

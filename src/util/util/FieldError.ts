@@ -16,15 +16,23 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import "missing-native-js-functions";
+import { ErrorObject } from "ajv";
 
-export function FieldErrors(
-	fields: Record<string, { code?: string; message: string }>,
-) {
+export interface FieldErrorResponse {
+	code: number;
+	message: string;
+	errors: ErrorList;
+}
+
+export type ErrorList = Record<string, ObjectErrorContent>;
+export type ErrorContent = { code: string; message: string };
+export type ObjectErrorContent = { _errors: ErrorContent[] };
+
+export function FieldErrors(fields: Record<string, { code?: string; message: string }>, errors?: ErrorObject[]) {
 	return new FieldError(
 		50035,
 		"Invalid Form Body",
-		fields.map(({ message, code }) => ({
+		Object.values(fields).map(({ message, code }) => ({
 			_errors: [
 				{
 					message,
@@ -32,6 +40,7 @@ export function FieldErrors(
 				},
 			],
 		})),
+		errors,
 	);
 }
 
@@ -43,6 +52,7 @@ export class FieldError extends Error {
 		public code: string | number,
 		public message: string,
 		public errors?: object, // TODO: I don't like this typing.
+		public _ajvErrors?: ErrorObject[],
 	) {
 		super(message);
 	}

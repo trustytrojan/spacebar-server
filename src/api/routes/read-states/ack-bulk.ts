@@ -17,8 +17,9 @@
 */
 
 import { route } from "@spacebar/api";
-import { AckBulkSchema, ReadState } from "@spacebar/util";
+import { ReadState } from "@spacebar/util";
 import { Request, Response, Router } from "express";
+import { AckBulkSchema } from "@spacebar/schemas";
 const router = Router({ mergeParams: true });
 
 router.post(
@@ -55,6 +56,8 @@ router.post(
 					});
 
 				ret.last_message_id = x.message_id;
+				//It's a little more complicated than this but this'll do
+				ret.mention_count = 0;
 
 				return ret.save();
 			}),

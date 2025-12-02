@@ -21,13 +21,11 @@ import {
 	Channel,
 	Config,
 	Permissions,
-	UploadAttachmentRequestSchema,
-	UploadAttachmentResponseSchema,
 	User,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
-import { CloudAttachment } from "../../../../util/entities/CloudAttachment";
-import fetch from "node-fetch-commonjs";
+import { CloudAttachment } from "@spacebar/util";
+import { UploadAttachmentRequestSchema, UploadAttachmentResponseSchema } from "@spacebar/schemas"
 
 const router: Router = Router({ mergeParams: true });
 

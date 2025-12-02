@@ -18,7 +18,6 @@
 
 import FormData from "form-data";
 import { HTTPError } from "lambert-server";
-import fetch from "node-fetch-commonjs";
 import { Attachment } from "../entities";
 import { Config } from "./Config";
 
@@ -43,7 +42,7 @@ export async function uploadFile(
 				...form.getHeaders(),
 			},
 			method: "POST",
-			body: form,
+			body: form.getBuffer(),
 		},
 	);
 	const result = (await response.json()) as Attachment;

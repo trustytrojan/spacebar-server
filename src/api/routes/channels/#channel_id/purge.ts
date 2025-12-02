@@ -21,15 +21,14 @@ import {
 	Channel,
 	Message,
 	MessageDeleteBulkEvent,
-	PurgeSchema,
 	emitEvent,
 	getPermission,
 	getRights,
-	isTextChannel,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
 import { HTTPError } from "lambert-server";
 import { Between, FindManyOptions, FindOperator, Not } from "typeorm";
+import { isTextChannel, PurgeSchema } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 

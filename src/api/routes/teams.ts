@@ -20,13 +20,11 @@ import { Request, Response, Router } from "express";
 import { route } from "@spacebar/api";
 import {
 	Team,
-	TeamCreateSchema,
 	TeamMember,
-	TeamMemberRole,
-	TeamMemberState,
 	User,
 } from "@spacebar/util";
 import { HTTPError } from "lambert-server";
+import { TeamCreateSchema, TeamMemberRole, TeamMemberState } from "@spacebar/schemas";
 
 const router: Router = Router({ mergeParams: true });
 
