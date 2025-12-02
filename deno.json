@@ -4,6 +4,10 @@
 		"@spacebar/cdn": "./src/cdn/index.ts",
 		"@spacebar/gateway": "./src/gateway/index.ts",
 		"@spacebar/util": "./src/util/index.ts",
-		"@spacebar/webrtc": "./src/webrtc/index.ts"
+		"@spacebar/util/entities": "./src/util/entities/index.ts",
+		"@spacebar/util/util": "./src/util/util/index.ts",
+		"@spacebar/webrtc": "./src/webrtc/index.ts",
+		"@spacebar/schemas": "./src/schemas/index.ts",
+		"@spacebar/schemas*": "./src/schemas/index.ts"
 	}
 }

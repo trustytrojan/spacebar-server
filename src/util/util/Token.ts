@@ -20,8 +20,8 @@ import jwt, { VerifyOptions } from "jsonwebtoken";
 import { Config } from "./Config";
 import { User } from "../entities";
 import crypto from "node:crypto";
-import fs from "fs/promises";
-import { existsSync } from "fs";
+import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 // TODO: dont use deprecated APIs lol
 import {
 	FindOptionsRelationByString,

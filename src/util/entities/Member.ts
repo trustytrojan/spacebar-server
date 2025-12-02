@@ -18,7 +18,7 @@
 
 import { HTTPError } from "lambert-server";
 import { BeforeInsert, BeforeUpdate, Column, Entity, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, Not, PrimaryGeneratedColumn, RelationId } from "typeorm";
-import { Ban, Channel, PublicGuildRelations } from ".";
+import { Ban, Channel, PublicGuildRelations } from "./index";
 import { ReadyGuildDTO } from "../dtos";
 import { GuildCreateEvent, GuildDeleteEvent, GuildMemberAddEvent, GuildMemberRemoveEvent, GuildMemberUpdateEvent, MessageCreateEvent } from "../interfaces";
 import { Config, emitEvent } from "../util";

@@ -22,16 +22,16 @@ moduleAlias(__dirname + "../../../package.json");
 
 import "reflect-metadata";
 import cluster, { Worker } from "node:cluster";
-import os from "os";
+import os from "node:os";
 import { red, bold, yellow, cyan, blueBright, redBright } from "picocolors";
 import { initStats } from "./stats";
 import { config } from "dotenv";
 
 config({ quiet: true });
-import { execSync } from "child_process";
+import { execSync } from "node:child_process";
 import { centerString, Logo } from "@spacebar/util";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 
 const cores = process.env.THREADS ? parseInt(process.env.THREADS) : 1;
 

@@ -18,7 +18,7 @@
 
 import { Request } from "express";
 import { Column, Entity, FindOneOptions, JoinColumn, OneToMany, OneToOne } from "typeorm";
-import { Channel, Config, Email, FieldErrors, Snowflake, trimSpecial } from "..";
+import { Channel, Config, Email, FieldErrors, Snowflake, trimSpecial } from "../index";
 import { Random } from "../util";
 import { BaseClass } from "./BaseClass";
 import { ConnectedAccount } from "./ConnectedAccount";

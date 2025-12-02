@@ -25,7 +25,7 @@ import { config } from "dotenv";
 config({ quiet: true });
 import { SpacebarServer } from "./Server";
 import cluster from "node:cluster";
-import os from "os";
+import os from "node:os";
 let cores = 1;
 try {
 	cores = Number(process.env.THREADS) || os.cpus().length;
